@@ -10,13 +10,37 @@ Description: >-
 # Transform section specifies one or more macros that AWS CloudFormation uses to process your template
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/transform-section-structure.html
 Transform:
-- AWS::Serverless-2016-10-31
+  - AWS::Serverless-2016-10-31
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
 Resources:
   # Each Lambda function is defined by properties:
   # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+
+  # API gateway
+  v1APIgateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: v1
+      Auth:
+        # DefaultAuthorizer: LambdaAuthorizer
+        Authorizers:
+          LambdaAuthorizer:
+            FunctionArn: !GetAtt LambdaAuthorizer.Arn
+
+  LambdaAuthorizer:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/lambda-authorizer.lambdaAuthorizerHandler
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 100
+      Description:
+        A simple example includes a HTTP get method to get all items from
+        a DynamoDB table.
 
   # This is a Lambda function config associated with the source code: get-all-items.js
   getAllItemsFunction:
@@ -25,15 +49,16 @@ Resources:
       Handler: src/handlers/get-all-items.getAllItemsHandler
       Runtime: nodejs18.x
       Architectures:
-      - x86_64
+        - x86_64
       MemorySize: 128
       Timeout: 100
-      Description: A simple example includes a HTTP get method to get all items from
+      Description:
+        A simple example includes a HTTP get method to get all items from
         a DynamoDB table.
       Policies:
         # Give Create/Read/Update/Delete Permissions to the SampleTable
-      - DynamoDBCrudPolicy:
-          TableName: !Ref SampleTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SampleTable
       Environment:
         Variables:
           # Make table name accessible as environment variable from function code during execution
@@ -41,7 +66,10 @@ Resources:
       Events:
         Api:
           Type: Api
+          Auth:
+            Authorizer: NONE
           Properties:
+            ResApiId: !Ref v1APIgateway
             Path: /
             Method: GET
   # Each Lambda function is defined by properties:
@@ -54,15 +82,16 @@ Resources:
       Handler: src/handlers/get-by-id.getByIdHandler
       Runtime: nodejs18.x
       Architectures:
-      - x86_64
+        - x86_64
       MemorySize: 128
       Timeout: 100
-      Description: A simple example includes a HTTP get method to get one item by
+      Description:
+        A simple example includes a HTTP get method to get one item by
         id from a DynamoDB table.
       Policies:
         # Give Create/Read/Update/Delete Permissions to the SampleTable
-      - DynamoDBCrudPolicy:
-          TableName: !Ref SampleTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SampleTable
       Environment:
         Variables:
           # Make table name accessible as environment variable from function code during execution
@@ -70,7 +99,10 @@ Resources:
       Events:
         Api:
           Type: Api
+          Auth:
+            Authorizer: NONE
           Properties:
+            RestApiId: !Ref v1APIgateway
             Path: /{id}
             Method: GET
   # Each Lambda function is defined by properties:
@@ -83,15 +115,16 @@ Resources:
       Handler: src/handlers/put-item.putItemHandler
       Runtime: nodejs18.x
       Architectures:
-      - x86_64
+        - x86_64
       MemorySize: 128
       Timeout: 100
-      Description: A simple example includes a HTTP post method to add one item to
+      Description:
+        A simple example includes a HTTP post method to add one item to
         a DynamoDB table.
       Policies:
         # Give Create/Read/Update/Delete Permissions to the SampleTable
-      - DynamoDBCrudPolicy:
-          TableName: !Ref SampleTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SampleTable
       Environment:
         Variables:
           # Make table name accessible as environment variable from function code during execution
@@ -99,7 +132,10 @@ Resources:
       Events:
         Api:
           Type: Api
+          Auth:
+            Authorizer: LambdaAuthorizer
           Properties:
+            RestApiId: !Ref v1APIgateway
             Path: /
             Method: POST
   # Simple syntax to create a DynamoDB table with a single attribute primary key, more in
@@ -121,9 +157,9 @@ Resources:
     Properties:
       Name:
         Fn::Join:
-        - ''
-        - - ApplicationInsights-SAM-
-          - Ref: AWS::StackName
+          - ""
+          - - ApplicationInsights-SAM-
+            - Ref: AWS::StackName
       ResourceQuery:
         Type: CLOUDFORMATION_STACK_1_0
   ApplicationInsightsMonitoring:
@@ -131,12 +167,21 @@ Resources:
     Properties:
       ResourceGroupName:
         Fn::Join:
-        - ''
-        - - ApplicationInsights-SAM-
-          - Ref: AWS::StackName
-      AutoConfigurationEnabled: 'true'
+          - ""
+          - - ApplicationInsights-SAM-
+            - Ref: AWS::StackName
+      AutoConfigurationEnabled: "true"
     DependsOn: ApplicationResourceGroup
+
 Outputs:
   WebEndpoint:
     Description: API Gateway endpoint URL for Prod stage
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  ApiId:
+    Description: "API ID"
+    Value: !Ref v1APIgateway
+
+  ApiUrl:
+    Description: "API endpoint URL for Prod environment"
+    Value: !Sub "https://${v1APIgateway}.execute-api.${AWS::Region}.amazonaws.com/dev/"
